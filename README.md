@@ -23,17 +23,29 @@ Custom statusline configuration for [Claude Code](https://docs.anthropic.com/en/
 
 ## Installation
 
+### Quick Install (recommended)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/chardigio/claude-code-statusline/main/install.sh | bash
+```
+
+This downloads the script to `~/.claude/statusline.sh` and configures Claude Code to use it.
+
+### Manual Installation
+
 1. Download the script:
    ```bash
    curl -o ~/.claude/statusline.sh https://raw.githubusercontent.com/chardigio/claude-code-statusline/main/statusline.sh
    chmod +x ~/.claude/statusline.sh
    ```
 
-2. Configure Claude Code to use it by adding to `~/.claude/settings.json`:
+2. Configure Claude Code by adding to `~/.claude/settings.json`:
    ```json
    {
-     "statusline": {
-       "script": "~/.claude/statusline.sh"
+     "statusLine": {
+       "type": "command",
+       "command": "~/.claude/statusline.sh",
+       "padding": 0
      }
    }
    ```
