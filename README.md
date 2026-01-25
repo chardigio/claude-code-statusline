@@ -11,7 +11,7 @@ Custom statusline configuration for [Claude Code](https://docs.anthropic.com/en/
 
 ## Features
 
-- **Model indicator** abbreviated (e.g., Opus -> O, Sonnet -> S, Haiku -> H)
+- **Model indicator** abbreviated (e.g., Opus 4.5 -> O4.5, Sonnet 4.1 -> S4.1, etc.)
 - **Context window** usage bar with token count
 - **Rate limit bars** for 5-hour and 7-day windows with pace-based coloring:
   - 🟢 Green: sustainable pace
