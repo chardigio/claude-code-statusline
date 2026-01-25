@@ -9,20 +9,21 @@ INPUT=$(cat)
 
 get_model_name() {
     local name=$(echo "$INPUT" | jq -r '.model.display_name')
-    # Check if thinking is enabled from settings file
-    local thinking=$(jq -r '.alwaysThinkingEnabled // false' ~/.claude/settings.json 2>/dev/null)
     # Extract first letter + version number (e.g., "Opus 4.5" -> "O4.5")
     local first_letter=$(echo "$name" | sed 's/[^a-zA-Z]//g' | cut -c1 | tr '[:lower:]' '[:upper:]')
     local version=$(echo "$name" | grep -oE '[0-9]+(\.[0-9]+)?' | head -1)
-    local suffix=""
-    if [ "$thinking" = "true" ]; then
-        suffix="T"
-    fi
     if [ -n "$first_letter" ] && [ -n "$version" ]; then
-        echo "${first_letter}${version}${suffix}"
+        echo "${first_letter}${version}"
     else
-        echo "${name}${suffix}"
+        echo "${name}"
     fi
+
+    # NOTE: Thinking mode detection is not yet supported by Claude Code.
+    # Reading from ~/.claude/settings.json only gives the *configured* value,
+    # not the actual runtime state (e.g., after Tab toggles during a session).
+    # See: https://github.com/anthropics/claude-code/issues/9488
+    # Once Claude exposes thinking_mode in the statusline JSON, we can add a "T"
+    # suffix to indicate when extended thinking is active.
 }
 
 get_current_dir() {
