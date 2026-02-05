@@ -441,7 +441,7 @@ build_status_line() {
     local ctx_color="2;32"  # green
     if [ "$current_ctx" -gt 170000 ] 2>/dev/null; then
         ctx_color="2;31"  # red
-    elif [ "$current_ctx" -gt 125000 ] 2>/dev/null; then
+    elif [ "$current_ctx" -gt 135000 ] 2>/dev/null; then
         ctx_color="2;33"  # yellow
     fi
     local ctx_bar=$(progress_bar "$ctx_pct" 8)
