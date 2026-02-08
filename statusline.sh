@@ -364,13 +364,14 @@ build_status_line() {
         ctx_pct=$((current_ctx * 100 / ctx_size))
     fi
 
+    # Directory segment (blue) - folder emoji
+    local dir_segment=$(printf " 📁 \033[2;34m%s\033[0m" "$display_dir")
+
     # Model segment (cyan) - brain emoji
     local model_segment=$(printf "🧠 \033[2;36m%s\033[0m" "$model")
 
-    # Directory segment (blue) - folder emoji - starts new line
-    local dir_segment=$(printf "\n📁 \033[2;34m%s\033[0m" "$display_dir")
-
     # Git segment - branch emoji with ahead/behind remote
+    # Branch name is yellow if there are uncommitted changes, green if clean
     local git_segment=""
     local git_branch=$(get_git_branch)
     if [ -n "$git_branch" ]; then
@@ -384,7 +385,12 @@ build_status_line() {
         if [ "$behind" -gt 0 ] 2>/dev/null; then
             remote_status="${remote_status}↓${behind}"
         fi
-        git_segment=$(printf " 🌿 \033[2;32m%s%s\033[0m" "$git_branch" "$remote_status")
+        local git_status=$(get_git_status)
+        local branch_color="2;32"  # green (clean)
+        if [ "$git_status" = "dirty" ]; then
+            branch_color="2;33"  # yellow (uncommitted changes)
+        fi
+        git_segment=$(printf " 🌿 \033[%sm%s%s\033[0m" "$branch_color" "$git_branch" "$remote_status")
     fi
 
     # Usage limit segment - shows 5h/7d utilization with projected pace
@@ -446,17 +452,19 @@ build_status_line() {
     fi
     local ctx_bar=$(progress_bar "$ctx_pct" 8)
     local ctx_k=$((current_ctx / 1000))
-    local ctx_segment=$(printf " 📈 \033[%sm%s\033[0m%dk" "$ctx_color" "$ctx_bar" "$ctx_k")
+    local ctx_segment=$(printf "\n📈 \033[%sm%s\033[0m%dk" "$ctx_color" "$ctx_bar" "$ctx_k")
 
     # Combine all segments
+    # Line 1: model, directory, git branch, uncommitted changes
+    # Line 2: context window, rate limits, session cost
     printf "%s%s%s%s%s%s%s" \
         "$model_segment" \
-        "$ctx_segment" \
-        "$usage_segment" \
-        "$cost_segment" \
         "$dir_segment" \
         "$git_segment" \
-        "$lines_segment"
+        "$lines_segment" \
+        "$ctx_segment" \
+        "$usage_segment" \
+        "$cost_segment"
 }
 
 # Execute
