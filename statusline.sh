@@ -443,9 +443,9 @@ build_status_line() {
     fi
 
     # Context window segment - progress bar with size in thousands
-    # Color based on absolute token count: green < 125k, yellow 125k-170k, red > 170k
+    # Color based on absolute token count: green < 135k, yellow 135k-160k, red > 160k
     local ctx_color="2;32"  # green
-    if [ "$current_ctx" -gt 170000 ] 2>/dev/null; then
+    if [ "$current_ctx" -gt 160000 ] 2>/dev/null; then
         ctx_color="2;31"  # red
     elif [ "$current_ctx" -gt 135000 ] 2>/dev/null; then
         ctx_color="2;33"  # yellow
