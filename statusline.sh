@@ -364,8 +364,8 @@ build_status_line() {
         ctx_pct=$((current_ctx * 100 / ctx_size))
     fi
 
-    # Directory segment (blue) - folder emoji
-    local dir_segment=$(printf "📁 \033[2;34m%s\033[0m" "$display_dir")
+    # Directory segment (blue) - folder emoji (leading space since it follows model on line 2)
+    local dir_segment=$(printf " 📁 \033[2;34m%s\033[0m" "$display_dir")
 
     # Model segment (cyan) - brain emoji
     local model_segment=$(printf "🧠 \033[2;36m%s\033[0m" "$model")
@@ -450,16 +450,16 @@ build_status_line() {
     fi
     local ctx_bar=$(progress_bar "$ctx_pct" 8)
     local ctx_k=$((current_ctx / 1000))
-    local ctx_segment=$(printf " 📈 \033[%sm%s\033[0m%dk" "$ctx_color" "$ctx_bar" "$ctx_k")
+    local ctx_segment=$(printf "📈 \033[%sm%s\033[0m%dk" "$ctx_color" "$ctx_bar" "$ctx_k")
 
     # Combine all segments
-    # Line 1: model, context window, rate limits, session cost
-    # Line 2: directory, git branch, uncommitted changes
-    printf "%s%s%s%s\n%s%s%s" \
-        "$model_segment" \
+    # Line 1: context window, rate limits, session cost
+    # Line 2: model, directory, git branch, uncommitted changes
+    printf "%s%s%s\n%s%s%s%s" \
         "$ctx_segment" \
         "$usage_segment" \
         "$cost_segment" \
+        "$model_segment" \
         "$dir_segment" \
         "$git_segment" \
         "$lines_segment"
