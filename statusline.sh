@@ -344,6 +344,9 @@ build_status_line() {
     local cwd=$(get_current_dir)
     local display_dir="${cwd/#$HOME/~}"
 
+    # Shorten ~/.worktrees/ to ~/.w…/
+    display_dir="${display_dir/\/.worktrees\///.w…/}"
+
     # Shorten directory if too long
     if [ ${#display_dir} -gt 30 ]; then
         display_dir="...${display_dir: -27}"
