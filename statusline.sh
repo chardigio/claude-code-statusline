@@ -365,7 +365,7 @@ build_status_line() {
     fi
 
     # Directory segment (blue) - folder emoji
-    local dir_segment=$(printf " 📁 \033[2;34m%s\033[0m" "$display_dir")
+    local dir_segment=$(printf "📁 \033[2;34m%s\033[0m" "$display_dir")
 
     # Model segment (cyan) - brain emoji
     local model_segment=$(printf "🧠 \033[2;36m%s\033[0m" "$model")
@@ -429,7 +429,7 @@ build_status_line() {
         cost_segment=$(printf " 💰 \033[2;32m\$%.2f\033[0m" "$session_cost")
     fi
 
-    # Lines changed segment - pencil emoji - shows uncommitted git changes
+    # Lines changed segment - pencil emoji - shows uncommitted git changes (always shown)
     local lines_segment=""
     local cwd=$(get_current_dir)
     if git -C "$cwd" rev-parse --git-dir >/dev/null 2>&1; then
@@ -437,9 +437,7 @@ build_status_line() {
         local staged_stats=$(git -C "$cwd" diff --cached --numstat 2>/dev/null | awk '{add+=$1; del+=$2} END {printf "%d %d", add+0, del+0}')
         local added=$(( ${diff_stats%% *} + ${staged_stats%% *} ))
         local removed=$(( ${diff_stats##* } + ${staged_stats##* } ))
-        if [ "$added" -gt 0 ] || [ "$removed" -gt 0 ]; then
-            lines_segment=$(printf " ✏️ \033[2;32m+%d\033[0m/\033[2;31m-%d\033[0m" "$added" "$removed")
-        fi
+        lines_segment=$(printf " ✏️ \033[2;32m+%d\033[0m/\033[2;31m-%d\033[0m" "$added" "$removed")
     fi
 
     # Context window segment - progress bar with size in thousands
@@ -452,19 +450,19 @@ build_status_line() {
     fi
     local ctx_bar=$(progress_bar "$ctx_pct" 8)
     local ctx_k=$((current_ctx / 1000))
-    local ctx_segment=$(printf "\n📈 \033[%sm%s\033[0m%dk" "$ctx_color" "$ctx_bar" "$ctx_k")
+    local ctx_segment=$(printf " 📈 \033[%sm%s\033[0m%dk" "$ctx_color" "$ctx_bar" "$ctx_k")
 
     # Combine all segments
-    # Line 1: model, directory, git branch, uncommitted changes
-    # Line 2: context window, rate limits, session cost
-    printf "%s%s%s%s%s%s%s" \
+    # Line 1: model, context window, rate limits, session cost
+    # Line 2: directory, git branch, uncommitted changes
+    printf "%s%s%s%s\n%s%s%s" \
         "$model_segment" \
-        "$dir_segment" \
-        "$git_segment" \
-        "$lines_segment" \
         "$ctx_segment" \
         "$usage_segment" \
-        "$cost_segment"
+        "$cost_segment" \
+        "$dir_segment" \
+        "$git_segment" \
+        "$lines_segment"
 }
 
 # Execute
