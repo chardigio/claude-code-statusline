@@ -344,8 +344,12 @@ build_status_line() {
     local cwd=$(get_current_dir)
     local display_dir="${cwd/#$HOME/~}"
 
-    # Shorten ~/.worktrees/ to ~/.w…/
-    display_dir="${display_dir/\/.worktrees\///.w…/}"
+    # Detect worktree and shorten prefix
+    local dir_emoji="📁"
+    if [[ "$display_dir" == ~/.worktrees/* ]]; then
+        dir_emoji="🌲"
+        display_dir="${display_dir/#~\/.worktrees\//}"
+    fi
 
     # Shorten directory if too long
     if [ ${#display_dir} -gt 30 ]; then
@@ -367,8 +371,8 @@ build_status_line() {
         ctx_pct=$((current_ctx * 100 / ctx_size))
     fi
 
-    # Directory segment (blue) - folder emoji (leading space since it follows model on line 2)
-    local dir_segment=$(printf " 📁 \033[2;34m%s\033[0m" "$display_dir")
+    # Directory segment (blue) - folder emoji or tree emoji for worktrees (leading space since it follows model on line 2)
+    local dir_segment=$(printf " %s \033[2;34m%s\033[0m" "$dir_emoji" "$display_dir")
 
     # Model segment (cyan) - brain emoji
     local model_segment=$(printf "🧠 \033[2;36m%s\033[0m" "$model")
