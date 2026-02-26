@@ -346,7 +346,7 @@ build_status_line() {
 
     # Detect worktree and shorten prefix
     local dir_emoji="📁"
-    if [[ "$display_dir" == ~/.worktrees/* ]]; then
+    if [[ "$display_dir" == "~/.worktrees/"* ]]; then
         dir_emoji="🌲"
         display_dir="${display_dir/#~\/.worktrees\//}"
     fi
