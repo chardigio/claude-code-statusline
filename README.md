@@ -22,6 +22,10 @@ Custom statusline configuration for [Claude Code](https://docs.anthropic.com/en/
   - 🔴 Red: at or over limit
 - **Session cost** tracking
 
+## API Pricing Variant
+
+If you use **API pricing** instead of a Pro/Team plan, check out [claude-code-api-statusline](https://github.com/chardigio/claude-code-api-statusline) — a variant without the rate limit progress bars, since API users don't have 5-hour/7-day usage limits.
+
 ## Installation
 
 ### Quick Install (recommended)
