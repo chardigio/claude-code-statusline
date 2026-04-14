@@ -46,67 +46,16 @@ get_session_id() {
     echo "$INPUT" | jq -r '.session_id'
 }
 
-# Usage limit tracking via Anthropic API
-# Caches results to avoid hammering the API on every statusline refresh
-USAGE_CACHE="$HOME/.claude_usage_cache"
-CACHE_TTL=60  # Cache for 60 seconds
-
-get_usage_limits() {
-    local now=$(date +%s)
-
-    # Check if cache is valid
-    if [ -f "$USAGE_CACHE" ]; then
-        local cache_time=$(head -1 "$USAGE_CACHE" 2>/dev/null || echo "0")
-        local age=$((now - cache_time))
-        if [ "$age" -lt "$CACHE_TTL" ]; then
-            tail -n +2 "$USAGE_CACHE"
-            return
-        fi
-    fi
-
-    # Get OAuth token from keychain
-    local creds=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null)
-    if [ -z "$creds" ]; then
-        echo "null"
-        return
-    fi
-
-    local token=$(echo "$creds" | jq -r '.claudeAiOauth.accessToken // .accessToken // .access_token // empty' 2>/dev/null)
-    if [ -z "$token" ]; then
-        echo "null"
-        return
-    fi
-
-    # Call the usage API
-    local response=$(curl -s --max-time 5 \
-        -H "Accept: application/json" \
-        -H "Authorization: Bearer $token" \
-        -H "anthropic-beta: oauth-2025-04-20" \
-        "https://api.anthropic.com/api/oauth/usage" 2>/dev/null)
-
-    if [ -n "$response" ] && echo "$response" | jq -e '.five_hour' >/dev/null 2>&1; then
-        # Cache the result
-        echo "$now" > "$USAGE_CACHE"
-        echo "$response" >> "$USAGE_CACHE"
-        echo "$response"
-    else
-        # Return cached value if API fails, or null
-        if [ -f "$USAGE_CACHE" ]; then
-            tail -n +2 "$USAGE_CACHE"
-        else
-            echo "null"
-        fi
-    fi
-}
+# Usage limit tracking - reads directly from Claude Code's statusline JSON input
+# Claude Code provides rate_limits.five_hour and rate_limits.seven_day in the JSON
+# No external API calls needed
 
 get_five_hour_utilization() {
-    local usage=$(get_usage_limits)
-    echo "$usage" | jq -r '.five_hour.utilization // 0' 2>/dev/null || echo "0"
+    echo "$INPUT" | jq -r '.rate_limits.five_hour.used_percentage // 0' 2>/dev/null || echo "0"
 }
 
 get_seven_day_utilization() {
-    local usage=$(get_usage_limits)
-    echo "$usage" | jq -r '.seven_day.utilization // 0' 2>/dev/null || echo "0"
+    echo "$INPUT" | jq -r '.rate_limits.seven_day.used_percentage // 0' 2>/dev/null || echo "0"
 }
 
 # Generate ASCII progress bar
@@ -183,19 +132,16 @@ format_time_remaining() {
 }
 
 get_five_hour_seconds_remaining() {
-    local usage=$(get_usage_limits)
-    local resets_at=$(echo "$usage" | jq -r '.five_hour.resets_at // empty' 2>/dev/null)
+    local resets_at=$(echo "$INPUT" | jq -r '.rate_limits.five_hour.resets_at // empty' 2>/dev/null)
     if [ -z "$resets_at" ] || [ "$resets_at" = "null" ]; then
         echo ""
         return
     fi
-    local reset_ts=$(date -j -u -f "%Y-%m-%dT%H:%M:%S" "${resets_at%%.*}" "+%s" 2>/dev/null)
+    # Guard against floats or non-integer values
+    local resets_at_int=$(printf '%.0f' "$resets_at" 2>/dev/null)
+    if [ -z "$resets_at_int" ]; then echo ""; return; fi
     local now=$(date +%s)
-    if [ -n "$reset_ts" ]; then
-        echo $((reset_ts - now))
-    else
-        echo ""
-    fi
+    echo $((resets_at_int - now))
 }
 
 get_five_hour_time_remaining() {
@@ -208,19 +154,16 @@ get_five_hour_time_remaining() {
 }
 
 get_seven_day_seconds_remaining() {
-    local usage=$(get_usage_limits)
-    local resets_at=$(echo "$usage" | jq -r '.seven_day.resets_at // empty' 2>/dev/null)
+    local resets_at=$(echo "$INPUT" | jq -r '.rate_limits.seven_day.resets_at // empty' 2>/dev/null)
     if [ -z "$resets_at" ] || [ "$resets_at" = "null" ]; then
         echo ""
         return
     fi
-    local reset_ts=$(date -j -u -f "%Y-%m-%dT%H:%M:%S" "${resets_at%%.*}" "+%s" 2>/dev/null)
+    # Guard against floats or non-integer values
+    local resets_at_int=$(printf '%.0f' "$resets_at" 2>/dev/null)
+    if [ -z "$resets_at_int" ]; then echo ""; return; fi
     local now=$(date +%s)
-    if [ -n "$reset_ts" ]; then
-        echo $((reset_ts - now))
-    else
-        echo ""
-    fi
+    echo $((resets_at_int - now))
 }
 
 get_seven_day_time_remaining() {
@@ -364,12 +307,10 @@ build_status_line() {
     local seven_day_remaining=$(get_seven_day_time_remaining)
     local ctx_size=$(get_context_window_size)
 
-    # Calculate context percentage (current context, not cumulative)
+    # Use pre-calculated context percentage from Claude Code
     local current_ctx=$(get_current_context_tokens)
-    local ctx_pct=0
-    if [ "$ctx_size" != "null" ] && [ "$ctx_size" -gt 0 ] 2>/dev/null; then
-        ctx_pct=$((current_ctx * 100 / ctx_size))
-    fi
+    local ctx_pct=$(echo "$INPUT" | jq -r '.context_window.used_percentage // 0' 2>/dev/null)
+    local ctx_pct_int=${ctx_pct%.*}  # Truncate to integer
 
     # Directory segment (blue) - folder emoji or tree emoji for worktrees (leading space since it follows model on line 2)
     local dir_segment=$(printf " %s \033[2;34m%s\033[0m" "$dir_emoji" "$display_dir")
@@ -448,14 +389,14 @@ build_status_line() {
     fi
 
     # Context window segment - progress bar with size in thousands
-    # Color based on absolute token count: green < 135k, yellow 135k-160k, red > 160k
+    # Color based on percentage: green < 70%, yellow 70-85%, red > 85%
     local ctx_color="2;32"  # green
-    if [ "$current_ctx" -gt 160000 ] 2>/dev/null; then
+    if [ "$ctx_pct_int" -gt 85 ] 2>/dev/null; then
         ctx_color="2;31"  # red
-    elif [ "$current_ctx" -gt 135000 ] 2>/dev/null; then
+    elif [ "$ctx_pct_int" -gt 70 ] 2>/dev/null; then
         ctx_color="2;33"  # yellow
     fi
-    local ctx_bar=$(progress_bar "$ctx_pct" 8)
+    local ctx_bar=$(progress_bar "$ctx_pct_int" 8)
     local ctx_k=$((current_ctx / 1000))
     local ctx_segment=$(printf "📈 \033[%sm%s\033[0m%dk" "$ctx_color" "$ctx_bar" "$ctx_k")
 
