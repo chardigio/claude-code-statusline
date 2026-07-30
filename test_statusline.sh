@@ -167,6 +167,82 @@ else
     echo "SKIP: statusline-api variant not found at $STATUSLINE_API"
 fi
 
+# --- Test 8: Effort level / thinking / fast mode indicators ---
+echo ""
+echo "--- Test: Effort, thinking, and fast mode indicators ---"
+
+# Builds a minimal payload, splicing an extra JSON fragment into the root so each
+# case can toggle just the effort/thinking/fast_mode keys under test.
+make_flags_input() {
+    local extra=$1
+    local sep=""
+    [ -n "$extra" ] && sep=","
+    echo '{"model":{"display_name":"Opus 5"},"workspace":{"current_dir":"/tmp/test","project_dir":"/tmp/test"},"version":"2.1.220","cost":{"total_cost_usd":0,"total_duration_ms":1000,"total_lines_added":0,"total_lines_removed":0},"session_id":"test-flags","context_window":{"total_input_tokens":5000,"total_output_tokens":1000,"context_window_size":200000,"used_percentage":3,"remaining_percentage":97,"current_usage":{"input_tokens":5000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}'"$sep$extra"'}'
+}
+
+# Renders both variants for the same payload so the two scripts can never drift.
+run_flags() {
+    local script=$1
+    local extra=$2
+    make_flags_input "$extra" | /bin/bash "$script" 2>/dev/null
+}
+
+for VARIANT in "$STATUSLINE:full" "$STATUSLINE_API:api"; do
+    SCRIPT="${VARIANT%:*}"
+    LABEL="${VARIANT##*:}"
+    [ -f "$SCRIPT" ] || { echo "SKIP: $LABEL variant not found at $SCRIPT"; continue; }
+
+    # Every effort level renders its abbreviation glued to the model name
+    for PAIR in "low:O5·lo" "medium:O5·md" "high:O5·hi" "xhigh:O5·xh" "max:O5·max"; do
+        LEVEL="${PAIR%:*}"
+        EXPECTED="${PAIR##*:}"
+        OUT=$(run_flags "$SCRIPT" '"effort":{"level":"'"$LEVEL"'"}' | sed 's/\x1b\[[0-9;]*m//g')
+        assert_contains "[$LABEL] effort $LEVEL renders $EXPECTED" "$OUT" "$EXPECTED"
+    done
+
+    # Models without reasoning effort omit the key entirely - render nothing
+    OUT=$(run_flags "$SCRIPT" "" | sed 's/\x1b\[[0-9;]*m//g')
+    assert_contains "[$LABEL] no effort key still shows model" "$OUT" "O5"
+    assert_not_contains "[$LABEL] no effort key omits suffix" "$OUT" "·"
+
+    # Effort color escalates: green low/medium, yellow high, red xhigh/max
+    assert_contains "[$LABEL] effort low is green" \
+        "$(run_flags "$SCRIPT" '"effort":{"level":"low"}')" $'\033[2;32m·lo'
+    assert_contains "[$LABEL] effort medium is green" \
+        "$(run_flags "$SCRIPT" '"effort":{"level":"medium"}')" $'\033[2;32m·md'
+    assert_contains "[$LABEL] effort high is yellow" \
+        "$(run_flags "$SCRIPT" '"effort":{"level":"high"}')" $'\033[2;33m·hi'
+    assert_contains "[$LABEL] effort xhigh is red" \
+        "$(run_flags "$SCRIPT" '"effort":{"level":"xhigh"}')" $'\033[2;31m·xh'
+    assert_contains "[$LABEL] effort max is red" \
+        "$(run_flags "$SCRIPT" '"effort":{"level":"max"}')" $'\033[2;31m·max'
+
+    # An unrecognized future level must not render a bogus suffix
+    OUT=$(run_flags "$SCRIPT" '"effort":{"level":"ultra"}' | sed 's/\x1b\[[0-9;]*m//g')
+    assert_not_contains "[$LABEL] unknown effort level omits suffix" "$OUT" "·"
+
+    # Thinking indicator
+    assert_contains "[$LABEL] thinking enabled shows 💭" \
+        "$(run_flags "$SCRIPT" '"thinking":{"enabled":true}')" "💭"
+    assert_not_contains "[$LABEL] thinking disabled hides 💭" \
+        "$(run_flags "$SCRIPT" '"thinking":{"enabled":false}')" "💭"
+    assert_not_contains "[$LABEL] thinking key absent hides 💭" \
+        "$(run_flags "$SCRIPT" "")" "💭"
+
+    # Fast mode indicator
+    assert_contains "[$LABEL] fast_mode true shows 🚀" \
+        "$(run_flags "$SCRIPT" '"fast_mode":true')" "🚀"
+    assert_not_contains "[$LABEL] fast_mode false hides 🚀" \
+        "$(run_flags "$SCRIPT" '"fast_mode":false')" "🚀"
+    assert_not_contains "[$LABEL] fast_mode key absent hides 🚀" \
+        "$(run_flags "$SCRIPT" "")" "🚀"
+
+    # All three together, in model → effort → thinking → fast order
+    OUT=$(run_flags "$SCRIPT" '"effort":{"level":"xhigh"},"thinking":{"enabled":true},"fast_mode":true' | sed 's/\x1b\[[0-9;]*m//g')
+    assert_contains "[$LABEL] effort + thinking + fast render together" "$OUT" "O5·xh 💭 🚀"
+    assert_line_count "[$LABEL] flags keep output at 2 lines" "$OUT" 2
+done
+
 # --- Summary ---
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="

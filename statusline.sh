@@ -17,13 +17,42 @@ get_model_name() {
     else
         echo "${name}"
     fi
+}
 
-    # NOTE: Thinking mode detection is not yet supported by Claude Code.
-    # Reading from ~/.claude/settings.json only gives the *configured* value,
-    # not the actual runtime state (e.g., after Tab toggles during a session).
-    # See: https://github.com/anthropics/claude-code/issues/9488
-    # Once Claude exposes thinking_mode in the statusline JSON, we can add a "T"
-    # suffix to indicate when extended thinking is active.
+# Reasoning effort abbreviation, glued to the model name (e.g. "O5·xh").
+# Claude Code omits the `effort` key entirely for models with no effort control,
+# and an unrecognized level is treated the same way — better to show nothing than
+# to invent a label for a level this script has never heard of.
+get_effort_abbrev() {
+    case "$(echo "$INPUT" | jq -r '.effort.level // empty' 2>/dev/null)" in
+        low)    echo "lo" ;;
+        medium) echo "md" ;;
+        high)   echo "hi" ;;
+        xhigh)  echo "xh" ;;
+        max)    echo "max" ;;
+        *)      echo "" ;;
+    esac
+}
+
+# Effort colors escalate rather than being arbitrary, so a glance at the model
+# segment says how expensive this session's reasoning is.
+get_effort_color() {
+    case "$(echo "$INPUT" | jq -r '.effort.level // empty' 2>/dev/null)" in
+        high)      echo "2;33" ;;  # yellow
+        xhigh|max) echo "2;31" ;;  # red
+        *)         echo "2;32" ;;  # green (low/medium)
+    esac
+}
+
+# Extended thinking and fast mode are live session toggles, so they can only come
+# from the JSON payload — ~/.claude/settings.json holds the *configured* value and
+# goes stale the moment either is toggled mid-session.
+thinking_enabled() {
+    [ "$(echo "$INPUT" | jq -r '.thinking.enabled // false' 2>/dev/null)" = "true" ]
+}
+
+fast_mode_enabled() {
+    [ "$(echo "$INPUT" | jq -r '.fast_mode // false' 2>/dev/null)" = "true" ]
 }
 
 get_current_dir() {
@@ -315,8 +344,18 @@ build_status_line() {
     # Directory segment (blue) - folder emoji or tree emoji for worktrees (leading space since it follows model on line 2)
     local dir_segment=$(printf " %s \033[2;34m%s\033[0m" "$dir_emoji" "$display_dir")
 
-    # Model segment (cyan) - brain emoji
+    # Model segment (cyan) - brain emoji, with effort suffix and live mode flags
     local model_segment=$(printf "🧠 \033[2;36m%s\033[0m" "$model")
+    local effort_abbrev=$(get_effort_abbrev)
+    if [ -n "$effort_abbrev" ]; then
+        model_segment+=$(printf "\033[%sm·%s\033[0m" "$(get_effort_color)" "$effort_abbrev")
+    fi
+    if thinking_enabled; then
+        model_segment+=" 💭"
+    fi
+    if fast_mode_enabled; then
+        model_segment+=" 🚀"
+    fi
 
     # Git segment - branch emoji with ahead/behind remote
     # Branch name is yellow if there are uncommitted changes, green if clean
