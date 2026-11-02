@@ -79,6 +79,10 @@ get_session_id() {
 # Claude Code provides rate_limits.five_hour and rate_limits.seven_day in the JSON
 # No external API calls needed
 
+has_rate_limit() {
+    [ "$(echo "$INPUT" | jq -r --arg w "$1" '.rate_limits[$w] // empty | type' 2>/dev/null)" = "object" ]
+}
+
 get_five_hour_utilization() {
     echo "$INPUT" | jq -r '.rate_limits.five_hour.used_percentage // 0' 2>/dev/null || echo "0"
 }
@@ -396,19 +400,24 @@ build_status_line() {
     local seven_day_color=$(get_pace_color "$seven_day_int" "$seven_day_projected")
 
     # Format: ⚡️ ███▒▒░░░2h30m ██▒░░░░░4d5h (solid=current, dithered=projected)
-    local five_hr_bar=$(progress_bar_projected "$five_hr_int" "$five_hr_projected" 8)
-    local five_hr_part=$(printf "\033[%sm%s\033[0m" "$five_hr_color" "$five_hr_bar")
-    if [ -n "$five_hour_remaining" ]; then
-        five_hr_part=$(printf "\033[%sm%s\033[0m%s" "$five_hr_color" "$five_hr_bar" "$five_hour_remaining")
+    # A window gets a bar only when Claude Code sends it. Plans without a 5h
+    # session limit (Ultra) omit `five_hour` entirely, and API-key users omit
+    # `rate_limits` altogether; an empty bar for a limit that does not exist
+    # reads as "0% used" and wastes space.
+    local usage_parts=()
+    if has_rate_limit five_hour; then
+        local five_hr_bar=$(progress_bar_projected "$five_hr_int" "$five_hr_projected" 8)
+        usage_parts+=("$(printf "\033[%sm%s\033[0m%s" "$five_hr_color" "$five_hr_bar" "$five_hour_remaining")")
+    fi
+    if has_rate_limit seven_day; then
+        local seven_day_bar=$(progress_bar_projected "$seven_day_int" "$seven_day_projected" 8)
+        usage_parts+=("$(printf "\033[%sm%s\033[0m%s" "$seven_day_color" "$seven_day_bar" "$seven_day_remaining")")
     fi
 
-    local seven_day_bar=$(progress_bar_projected "$seven_day_int" "$seven_day_projected" 8)
-    local seven_day_part=$(printf "\033[%sm%s\033[0m" "$seven_day_color" "$seven_day_bar")
-    if [ -n "$seven_day_remaining" ]; then
-        seven_day_part=$(printf "\033[%sm%s\033[0m%s" "$seven_day_color" "$seven_day_bar" "$seven_day_remaining")
+    local usage_segment=""
+    if [ ${#usage_parts[@]} -gt 0 ]; then
+        usage_segment=" ⚡️ ${usage_parts[*]}"
     fi
-
-    local usage_segment=$(printf " ⚡️ %s %s" "$five_hr_part" "$seven_day_part")
 
     # Cost segment (session cost only now)
     local cost_segment=""

@@ -243,6 +243,59 @@ for VARIANT in "$STATUSLINE:full" "$STATUSLINE_API:api"; do
     assert_line_count "[$LABEL] flags keep output at 2 lines" "$OUT" 2
 done
 
+# --- Test 9: Only the windows Claude Code sends get a bar ---
+echo ""
+echo "--- Test: Rate-limit windows render only when present ---"
+
+# Builds a payload whose rate_limits object holds exactly the given fragment.
+make_limits_input() {
+    local limits=$1
+    echo '{"model":{"display_name":"Opus 5.5"},"workspace":{"current_dir":"/tmp/test","project_dir":"/tmp/test"},"version":"2.1.220","cost":{"total_cost_usd":0,"total_duration_ms":1000,"total_lines_added":0,"total_lines_removed":0},"session_id":"test-limits","context_window":{"total_input_tokens":5000,"total_output_tokens":1000,"context_window_size":200000,"used_percentage":3,"remaining_percentage":97,"current_usage":{"input_tokens":5000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}},"rate_limits":{'"$limits"'}}'
+}
+
+# Ultra plan: no 5h session limit, so Claude Code sends only seven_day.
+SEVEN_ONLY=$(make_limits_input '"seven_day":{"used_percentage":50,"resets_at":'"$(($(date +%s) + 259230))"'}' \
+    | /bin/bash "$STATUSLINE" 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g')
+LINE1=$(echo "$SEVEN_ONLY" | head -1)
+assert_contains "7d-only shows lightning bolt" "$LINE1" "⚡️"
+# Only one 8-wide bar follows the context bar: exactly two bars on line 1.
+BAR_COUNT=$(echo "$LINE1" | grep -oE '[█▒░]{8}' | wc -l | tr -d ' ')
+if [ "$BAR_COUNT" -eq 2 ]; then
+    echo -e "${GREEN}PASS${NC}: 7d-only renders one rate-limit bar"; PASS=$((PASS + 1))
+else
+    echo -e "${RED}FAIL${NC}: 7d-only renders one rate-limit bar (got $BAR_COUNT bars on line 1: $LINE1)"; FAIL=$((FAIL + 1))
+fi
+assert_contains "7d-only shows days remaining" "$LINE1" "3d0h"
+assert_line_count "7d-only output is 2 lines" "$SEVEN_ONLY" 2
+
+# 5h-only: symmetric, in case a plan ever drops the weekly window instead.
+FIVE_ONLY=$(make_limits_input '"five_hour":{"used_percentage":50,"resets_at":'"$(($(date +%s) + 7200))"'}' \
+    | /bin/bash "$STATUSLINE" 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g')
+LINE1=$(echo "$FIVE_ONLY" | head -1)
+BAR_COUNT=$(echo "$LINE1" | grep -oE '[█▒░]{8}' | wc -l | tr -d ' ')
+if [ "$BAR_COUNT" -eq 2 ]; then
+    echo -e "${GREEN}PASS${NC}: 5h-only renders one rate-limit bar"; PASS=$((PASS + 1))
+else
+    echo -e "${RED}FAIL${NC}: 5h-only renders one rate-limit bar (got $BAR_COUNT bars on line 1: $LINE1)"; FAIL=$((FAIL + 1))
+fi
+assert_not_contains "5h-only shows no days" "$LINE1" "d"
+
+# Both windows still render both bars (Pro plan).
+BOTH=$(make_limits_input '"five_hour":{"used_percentage":30,"resets_at":'"$(($(date +%s) + 7200))"'},"seven_day":{"used_percentage":50,"resets_at":'"$(($(date +%s) + 259230))"'}' \
+    | /bin/bash "$STATUSLINE" 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g')
+BAR_COUNT=$(echo "$BOTH" | head -1 | grep -oE '[█▒░]{8}' | wc -l | tr -d ' ')
+if [ "$BAR_COUNT" -eq 3 ]; then
+    echo -e "${GREEN}PASS${NC}: both windows render two rate-limit bars"; PASS=$((PASS + 1))
+else
+    echo -e "${RED}FAIL${NC}: both windows render two rate-limit bars (got $BAR_COUNT bars)"; FAIL=$((FAIL + 1))
+fi
+
+# No rate_limits at all (API key user): the whole segment disappears.
+NONE=$(echo "$NO_LIMITS_INPUT" | /bin/bash "$STATUSLINE" 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g')
+assert_not_contains "No rate limits omits lightning bolt" "$NONE" "⚡"
+EMPTY=$(make_limits_input '' | /bin/bash "$STATUSLINE" 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g')
+assert_not_contains "Empty rate_limits omits lightning bolt" "$EMPTY" "⚡"
+
 # --- Summary ---
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="

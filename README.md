@@ -21,7 +21,7 @@ If you use API pricing, see [claude-code-api-statusline](https://github.com/char
 - **Git branch** with ahead/behind indicators (yellow when there are uncommitted changes, green when clean)
 - **Uncommitted changes** (+added/-removed lines)
 - **Context window** usage bar with token count
-- **Rate limit bars** for 5-hour and 7-day windows with pace-based coloring:
+- **Rate limit bars** for 5-hour and 7-day windows with pace-based coloring. Each bar shows only when Claude Code reports that window, so a plan with no 5-hour session limit (Ultra) shows the 7-day bar only, and an API-key session shows no bars:
   - 🟢 Green: sustainable pace
   - 🟡 Yellow: on pace to hit limit
   - 🔴 Red: at or over limit
